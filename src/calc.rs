@@ -7,10 +7,10 @@ use crate::error::{Error, Result};
 
 /// Recognized fiat currency codes. Prevents false positives on tokens like `1inch` or `3btc`.
 const KNOWN_FIAT: &[&str] = &[
-    "USD", "EUR", "GBP", "JPY", "CNY", "CAD", "AUD", "CHF", "KRW", "INR",
-    "BRL", "RUB", "TRY", "ZAR", "MXN", "SGD", "HKD", "NOK", "SEK", "DKK",
-    "NZD", "PLN", "THB", "TWD", "CZK", "HUF", "ILS", "PHP", "MYR", "ARS",
-    "CLP", "COP", "IDR", "SAR", "AED", "NGN", "VND", "PKR", "BDT", "EGP",
+    "USD", "EUR", "GBP", "JPY", "CNY", "CAD", "AUD", "CHF", "KRW", "INR", "BRL", "RUB", "TRY",
+    "ZAR", "MXN", "SGD", "HKD", "NOK", "SEK", "DKK", "NZD", "PLN", "THB", "TWD", "CZK", "HUF",
+    "ILS", "PHP", "MYR", "ARS", "CLP", "COP", "IDR", "SAR", "AED", "NGN", "VND", "PKR", "BDT",
+    "EGP",
 ];
 
 /// A parsed fiat amount from user input (e.g. `3.5EUR`).

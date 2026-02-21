@@ -13,15 +13,26 @@ const BASE_URL: &str = "https://pro-api.coinmarketcap.com/v1";
 pub struct CoinMarketCap {
     client: Client,
     api_key: String,
+    base_url: String,
 }
 
 impl CoinMarketCap {
+    /// Create a CoinMarketCap provider using the default production API URL.
     pub fn new(api_key: String) -> Self {
+        Self::with_base_url(api_key, BASE_URL)
+    }
+
+    /// Create a CoinMarketCap provider with a custom base URL.
+    pub fn with_base_url(api_key: String, base_url: impl Into<String>) -> Self {
         let client = Client::builder()
             .user_agent("cryptoprice/0.1.0")
             .build()
             .expect("failed to build HTTP client");
-        Self { client, api_key }
+        Self {
+            client,
+            api_key,
+            base_url: base_url.into(),
+        }
     }
 }
 
@@ -67,7 +78,7 @@ impl PriceProvider for CoinMarketCap {
 
         let url = format!(
             "{}/cryptocurrency/quotes/latest?symbol={}&convert={}",
-            BASE_URL, symbols_joined, convert
+            self.base_url, symbols_joined, convert
         );
 
         debug!(url = %url, "fetching prices from CoinMarketCap");

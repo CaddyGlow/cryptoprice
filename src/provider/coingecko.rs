@@ -11,15 +11,25 @@ const BASE_URL: &str = "https://api.coingecko.com/api/v3";
 /// CoinGecko price provider -- free public API, no key required.
 pub struct CoinGecko {
     client: Client,
+    base_url: String,
 }
 
 impl CoinGecko {
+    /// Create a CoinGecko provider using the default production API URL.
     pub fn new() -> Self {
+        Self::with_base_url(BASE_URL)
+    }
+
+    /// Create a CoinGecko provider with a custom base URL.
+    pub fn with_base_url(base_url: impl Into<String>) -> Self {
         let client = Client::builder()
             .user_agent("cryptoprice/0.1.0")
             .build()
             .expect("failed to build HTTP client");
-        Self { client }
+        Self {
+            client,
+            base_url: base_url.into(),
+        }
     }
 
     /// Map common ticker symbols to (CoinGecko API id, display name).
@@ -58,6 +68,12 @@ impl CoinGecko {
     }
 }
 
+impl Default for CoinGecko {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// CoinGecko `/simple/price` response shape.
 /// Example: `{ "bitcoin": { "usd": 50000, "usd_24h_change": 2.5, "usd_market_cap": 9.5e11 } }`
 type SimplePrice = HashMap<String, HashMap<String, f64>>;
@@ -74,12 +90,16 @@ impl PriceProvider for CoinGecko {
 
     async fn get_prices(&self, symbols: &[String], currency: &str) -> Result<Vec<CoinPrice>> {
         let resolved: Vec<(String, String)> = symbols.iter().map(|s| Self::resolve(s)).collect();
-        let ids_param: String = resolved.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>().join(",");
+        let ids_param: String = resolved
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
         let cur = currency.to_lowercase();
 
         let url = format!(
             "{}/simple/price?ids={}&vs_currencies={}&include_24hr_change=true&include_market_cap=true",
-            BASE_URL, ids_param, cur
+            self.base_url, ids_param, cur
         );
 
         debug!(url = %url, "fetching prices from CoinGecko");
@@ -98,8 +118,8 @@ impl PriceProvider for CoinGecko {
             )));
         }
 
-        let data: SimplePrice =
-            serde_json::from_str(&body).map_err(|e| Error::Parse(format!("CoinGecko JSON: {}", e)))?;
+        let data: SimplePrice = serde_json::from_str(&body)
+            .map_err(|e| Error::Parse(format!("CoinGecko JSON: {}", e)))?;
 
         let change_key = format!("{}_24h_change", cur);
         let cap_key = format!("{}_market_cap", cur);

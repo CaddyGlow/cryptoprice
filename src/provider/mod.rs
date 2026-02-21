@@ -34,9 +34,7 @@ pub trait PriceProvider: Send + Sync {
 
 /// Build the list of available providers based on configuration.
 pub fn available_providers(api_key: Option<String>) -> Vec<Box<dyn PriceProvider>> {
-    let mut providers: Vec<Box<dyn PriceProvider>> = vec![
-        Box::new(coingecko::CoinGecko::new()),
-    ];
+    let mut providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(coingecko::CoinGecko::new())];
 
     if let Some(key) = api_key {
         providers.push(Box::new(coinmarketcap::CoinMarketCap::new(key)));

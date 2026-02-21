@@ -1,0 +1,7 @@
+.git
+.github
+.claude
+.venv
+target
+tests
+.env

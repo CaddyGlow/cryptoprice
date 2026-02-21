@@ -1,19 +1,16 @@
-mod calc;
-mod config;
-mod error;
-mod output;
-mod provider;
-
 use clap::Parser;
+use cryptoprice::{calc, config, error, output, provider};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 use crate::error::Result;
 
+const APP_VERSION: &str = env!("CRYPTOPRICE_VERSION");
+
 #[derive(Parser)]
 #[command(
     name = "cryptoprice",
-    version,
+    version = APP_VERSION,
     about = "Fetch cryptocurrency prices from your terminal"
 )]
 struct Cli {
@@ -53,8 +50,8 @@ fn init_logging(verbose: u8) {
         _ => "trace",
     };
 
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_level));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
 
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
@@ -114,9 +111,8 @@ async fn run(cli: Cli) -> Result<()> {
         }
 
         // Partition targets into fiat currencies and crypto symbols.
-        let (fiat_targets, crypto_targets): (Vec<String>, Vec<String>) = targets
-            .into_iter()
-            .partition(|t| calc::is_known_fiat(t));
+        let (fiat_targets, crypto_targets): (Vec<String>, Vec<String>) =
+            targets.into_iter().partition(|t| calc::is_known_fiat(t));
 
         info!(
             provider = prov.id(),
@@ -133,8 +129,7 @@ async fn run(cli: Cli) -> Result<()> {
             // Both fiat and crypto targets -- fetch concurrently.
             (false, false) => {
                 let http_client = reqwest::Client::new();
-                let fiat_fut =
-                    calc::fetch_fiat_rates(&http_client, &fiat.currency, &fiat_targets);
+                let fiat_fut = calc::fetch_fiat_rates(&http_client, &fiat.currency, &fiat_targets);
                 let crypto_fut = prov.get_prices(&crypto_targets, &fiat.currency);
 
                 let (fiat_result, crypto_result) = tokio::join!(fiat_fut, crypto_fut);

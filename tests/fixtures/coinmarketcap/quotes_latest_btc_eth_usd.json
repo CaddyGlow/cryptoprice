@@ -1,0 +1,38 @@
+{
+  "status": {
+    "timestamp": "2026-02-20T11:05:00.000Z",
+    "error_code": 0,
+    "error_message": null,
+    "elapsed": 12,
+    "credit_count": 1,
+    "notice": null
+  },
+  "data": {
+    "BTC": {
+      "id": 1,
+      "name": "Bitcoin",
+      "symbol": "BTC",
+      "slug": "bitcoin",
+      "quote": {
+        "USD": {
+          "price": 63781.21,
+          "percent_change_24h": 1.7345,
+          "market_cap": 1260000000000.0
+        }
+      }
+    },
+    "ETH": {
+      "id": 1027,
+      "name": "Ethereum",
+      "symbol": "ETH",
+      "slug": "ethereum",
+      "quote": {
+        "USD": {
+          "price": 3412.34,
+          "percent_change_24h": -2.1123,
+          "market_cap": 410000000000.0
+        }
+      }
+    }
+  }
+}
