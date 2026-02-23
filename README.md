@@ -1,6 +1,6 @@
 # cryptoprice
 
-`cryptoprice` is a Rust CLI for fast crypto price lookup and fiat conversion from the terminal.
+`cryptoprice` is a Rust CLI for fast crypto and stock price lookup plus fiat conversion from the terminal.
 
 Requirements: Rust 1.85+ (edition 2024).
 
@@ -140,10 +140,11 @@ Notes:
 
 ## CLI Overview
 
-`cryptoprice` supports two modes:
+`cryptoprice` supports three modes:
 
-1. Price lookup mode: query one or more crypto symbols.
+1. Price lookup mode: query one or more symbols (crypto or stocks).
 2. Conversion mode: provide `<amount><fiat>` as the first argument, then one or more target symbols/currencies.
+3. Ticker search mode: search symbols by keyword.
 
 Price lookup mode also supports chart output for historical prices.
 
@@ -154,9 +155,12 @@ Examples:
 ```sh
 cryptoprice --provider coingecko btc eth
 cryptoprice -p cmc -c eur btc sol
+cryptoprice -p yahoo CW8.PA VWCE.DE
+cryptoprice -p stooq aapl msft nvda
 cryptoprice --json -p coingecko btc eth
-cryptoprice --chart --days 30 -p coingecko btc eth
-cryptoprice --chart --days 14 --interval hourly -p cmc btc
+cryptoprice --chart --interval 1M -p coingecko btc eth
+cryptoprice --chart --interval 1Y -p yahoo CW8.PA
+cryptoprice --chart --interval 5D --sampling hourly -p cmc btc
 cryptoprice --list-providers
 ```
 
@@ -164,8 +168,31 @@ Notes:
 
 - `cmc` (CoinMarketCap) spot price lookup requires an API key via `--api-key`, `COINMARKETCAP_API_KEY`, or config file.
 - `coingecko` works without an API key.
-- `--list-providers` always includes both `coingecko` and `cmc`.
+- `yahoo` works without an API key and supports global stock/ETF symbols.
+- `stooq` works without an API key and supports stock/ETF symbols (US tickers default to `.US`).
+- `--list-providers` always includes `coingecko`, `cmc`, `yahoo`, and `stooq`.
 - Increase logging with `-v`, `-vv`, or `-vvv` (logs are written to stderr).
+
+### Ticker Search Mode
+
+Use `--search` to find matching ticker symbols before running price lookup.
+
+You can also use shorthand style `cryptoprice search <query>`.
+
+Examples:
+
+```sh
+cryptoprice --provider stooq --search apple
+cryptoprice --provider stooq --search tesla --search-limit 5
+cryptoprice --provider stooq --search nvidia --json
+cryptoprice search --provider stooq apple
+cryptoprice search --provider yahoo cw8
+```
+
+Notes:
+
+- Ticker search support is available on `stooq` and `yahoo`.
+- `--search-limit` defaults to `10` and supports `1..=50`.
 
 ### Chart Mode (Price History)
 
@@ -175,20 +202,25 @@ Examples:
 
 ```sh
 cryptoprice --chart btc
-cryptoprice --chart --days 30 --currency eur btc eth
-cryptoprice --chart --json --days 14 btc
-cryptoprice --chart --days 2 --interval hourly --provider cmc btc
-cryptoprice --chart --days 30 usd eur gbp
+cryptoprice --chart --interval 1M --currency eur btc eth
+cryptoprice --chart --interval 5D --json btc
+cryptoprice --chart --interval 5D --sampling hourly --provider cmc btc
+cryptoprice --chart --interval 6M --end-date 2025-12-31 usd eur gbp
+cryptoprice --chart --provider yahoo --start-date 2025-01-01 --end-date 2025-12-31 CW8.PA
 ```
 
 Notes:
 
-- `--days` controls the history window (`1..=365`, default `7`).
-- `--interval` controls sampling (`auto`, `hourly`, `daily`; default `auto`).
+- `--interval` controls the chart range preset: `1D`, `5D`, `1M`, `6M`, `YTD`, `1Y`, `5Y`, `ALL` (default `1M`).
+- `--sampling` controls point density (`auto`, `hourly`, `daily`; default `auto`).
+- `--start-date YYYY-MM-DD` sets an explicit chart window start and overrides `--interval`.
+- `--end-date YYYY-MM-DD` sets the chart window end date in UTC (defaults to today).
 - Chart mode works in price lookup mode, not conversion mode.
-- Chart history is supported by both `coingecko` and `cmc` providers.
+- Chart history is supported by `coingecko`, `cmc`, `yahoo`, and `stooq` providers.
 - CMC chart mode uses CoinMarketCap's public web chart endpoint for `USD` and falls back to the Pro API for other quote currencies.
-- All providers use shared XDG file cache (`$XDG_CACHE_HOME/cryptoprice` or `~/.cache/cryptoprice`): CoinMarketCap coin catalog TTL is 24h, daily chart TTL is 12h; CoinGecko quote TTL is 30s and chart TTL is 1h (hourly) / 12h (daily); Frankfurter latest rates TTL is 10m and history TTL is 12h.
+- Yahoo chart mode uses explicit `period1/period2` windows when `--start-date`/`--end-date` are provided.
+- Stooq chart mode is daily and does not provide market cap values.
+- All providers use shared XDG file cache (`$XDG_CACHE_HOME/cryptoprice` or `~/.cache/cryptoprice`): CoinMarketCap coin catalog TTL is 24h, daily chart TTL is 12h; CoinGecko quote TTL is 30s and chart TTL is 1h (hourly) / 12h (daily); Yahoo quote TTL is 30s, search TTL is 10m, and chart TTL is 1h (hourly) / 12h (daily); Stooq quote TTL is 30s and history TTL is 12h; Frankfurter latest rates TTL is 10m and history TTL is 12h.
 
 ### Fiat Chart Mode (Frankfurter)
 
@@ -198,14 +230,14 @@ Examples:
 
 ```sh
 cryptoprice --chart usd eur
-cryptoprice --chart --days 90 usd eur gbp jpy
+cryptoprice --chart --interval 6M usd eur gbp jpy
 cryptoprice --chart --json usd eur
 ```
 
 Notes:
 
 - Fiat chart mode uses Frankfurter (ECB reference rates).
-- Fiat history is daily; `--interval hourly` is not supported in fiat chart mode.
+- Fiat history is daily; `--sampling hourly` is not supported in fiat chart mode.
 
 ### Conversion Mode (Fiat to Crypto and Fiat)
 

@@ -4,7 +4,7 @@ use tabled::{Table, Tabled};
 
 use crate::calc::{self, Conversion};
 use crate::output::chart;
-use crate::provider::{CoinPrice, HistoryInterval, PriceHistory};
+use crate::provider::{CoinPrice, HistoryInterval, PriceHistory, TickerMatch};
 
 #[derive(Tabled)]
 struct PriceRow {
@@ -100,7 +100,11 @@ pub fn print_conversions_table(conversions: &[Conversion]) {
 }
 
 /// Print ASCII charts for historical price series.
-pub fn print_history_charts(histories: &[PriceHistory], days: u32, interval: HistoryInterval) {
+pub fn print_history_charts(
+    histories: &[PriceHistory],
+    range_label: &str,
+    sampling: HistoryInterval,
+) {
     for history in histories {
         if history.points.is_empty() {
             continue;
@@ -124,13 +128,13 @@ pub fn print_history_charts(histories: &[PriceHistory], days: u32, interval: His
         };
 
         println!(
-            "{} ({})  [{} {}d]",
+            "{} ({})  [{} {}]",
             history.symbol.bold(),
             history.name,
             history.currency,
-            days
+            range_label
         );
-        println!("Interval: {}", interval.as_str());
+        println!("Sampling: {}", sampling.as_str());
         println!(
             "Start: {}  End: {}  Change: {}",
             format_price(start, &history.currency),
@@ -146,6 +150,37 @@ pub fn print_history_charts(histories: &[PriceHistory], days: u32, interval: His
         println!("Provider: {}", history.provider.dimmed());
         println!();
     }
+}
+
+#[derive(Tabled)]
+struct TickerMatchRow {
+    #[tabled(rename = "Symbol")]
+    symbol: String,
+    #[tabled(rename = "Name")]
+    name: String,
+    #[tabled(rename = "Exchange")]
+    exchange: String,
+    #[tabled(rename = "Type")]
+    asset_type: String,
+    #[tabled(rename = "Provider")]
+    provider: String,
+}
+
+/// Print ticker search matches as a styled table to stdout.
+pub fn print_ticker_matches_table(matches: &[TickerMatch]) {
+    let rows: Vec<TickerMatchRow> = matches
+        .iter()
+        .map(|m| TickerMatchRow {
+            symbol: m.symbol.clone().bold().to_string(),
+            name: m.name.clone(),
+            exchange: m.exchange.clone(),
+            asset_type: m.asset_type.clone(),
+            provider: m.provider.clone().dimmed().to_string(),
+        })
+        .collect();
+
+    let table = Table::new(rows).with(Style::rounded()).to_string();
+    println!("{}", table);
 }
 
 fn format_crypto_amount(amount: f64, symbol: &str) -> String {

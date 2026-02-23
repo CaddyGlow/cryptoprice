@@ -2,6 +2,8 @@ use cryptoprice::error::Error;
 use cryptoprice::provider::coingecko::CoinGecko;
 use cryptoprice::provider::coinmarketcap::CoinMarketCap;
 use cryptoprice::provider::frankfurter::Frankfurter;
+use cryptoprice::provider::stooq::Stooq;
+use cryptoprice::provider::yahoo::YahooFinance;
 use cryptoprice::provider::{HistoryInterval, PriceProvider};
 use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -472,4 +474,221 @@ async fn coinmarketcap_provider_returns_no_results_when_response_has_no_data() {
     let result = provider.get_prices(&symbols, "usd").await;
 
     assert!(matches!(result, Err(Error::NoResults)));
+}
+
+#[tokio::test]
+async fn stooq_provider_fetches_and_parses_mocked_response() {
+    let server = MockServer::start().await;
+    let aapl_response = "AAPL.US,20260220,220019,190.00,194.10,189.70,193.80,42070499,";
+    let msft_response = "MSFT.US,20260220,220019,420.00,427.00,418.40,425.77,34015249,";
+
+    Mock::given(method("GET"))
+        .and(path("/q/l/"))
+        .and(query_param("s", "aapl.us"))
+        .and(query_param("i", "d"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(aapl_response))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/q/l/"))
+        .and(query_param("s", "msft.us"))
+        .and(query_param("i", "d"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(msft_response))
+        .mount(&server)
+        .await;
+
+    let provider = Stooq::with_base_url(server.uri());
+    let symbols = vec!["aapl".to_string(), "msft".to_string()];
+    let prices = provider.get_prices(&symbols, "usd").await.unwrap();
+
+    assert_eq!(prices.len(), 2);
+    assert_eq!(prices[0].symbol, "AAPL");
+    assert_eq!(prices[0].name, "AAPL");
+    assert!((prices[0].price - 193.80).abs() < f64::EPSILON);
+    assert!((prices[0].change_24h.unwrap() - 2.0).abs() < 1e-6);
+    assert_eq!(prices[0].market_cap, None);
+    assert_eq!(prices[0].currency, "USD");
+    assert_eq!(prices[0].provider, "Stooq");
+
+    assert_eq!(prices[1].symbol, "MSFT");
+    assert_eq!(prices[1].name, "MSFT");
+    assert!((prices[1].price - 425.77).abs() < f64::EPSILON);
+    assert!((prices[1].change_24h.unwrap() - 1.3738095238095238).abs() < 1e-9);
+    assert_eq!(prices[1].market_cap, None);
+    assert_eq!(prices[1].currency, "USD");
+    assert_eq!(prices[1].provider, "Stooq");
+}
+
+#[tokio::test]
+async fn stooq_provider_fetches_history_for_chart_mode() {
+    let server = MockServer::start().await;
+    let response = "Date,Open,High,Low,Close,Volume\n2026-02-18,190.0,194.1,189.7,193.8,42070499\n2026-02-19,193.8,195.0,191.0,192.5,39000000\n2026-02-20,192.5,196.2,192.0,195.7,41000000\n";
+
+    Mock::given(method("GET"))
+        .and(path("/q/d/l/"))
+        .and(query_param("s", "aapl.us"))
+        .and(query_param("i", "d"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(response))
+        .mount(&server)
+        .await;
+
+    let provider = Stooq::with_base_url(server.uri());
+    let symbols = vec!["aapl".to_string()];
+    let history = provider
+        .get_price_history(&symbols, "usd", 30, HistoryInterval::Daily)
+        .await
+        .expect("history should parse");
+
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].symbol, "AAPL");
+    assert_eq!(history[0].name, "AAPL");
+    assert_eq!(history[0].currency, "USD");
+    assert_eq!(history[0].provider, "Stooq");
+    assert_eq!(history[0].points.len(), 3);
+    assert!((history[0].points[0].price - 193.8).abs() < f64::EPSILON);
+    assert!((history[0].points[2].price - 195.7).abs() < f64::EPSILON);
+}
+
+#[tokio::test]
+async fn stooq_provider_searches_tickers() {
+    let server = MockServer::start().await;
+    let response = serde_json::json!({
+        "quotes": [
+            {
+                "symbol": "AAPL",
+                "shortname": "Apple Inc.",
+                "longname": "Apple Inc.",
+                "exchDisp": "NASDAQ",
+                "typeDisp": "Equity"
+            },
+            {
+                "symbol": "APLE",
+                "shortname": "Apple Hospitality REIT, Inc.",
+                "exchDisp": "NYSE",
+                "typeDisp": "Equity"
+            }
+        ]
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/v1/finance/search"))
+        .and(query_param("q", "apple"))
+        .and(query_param("quotesCount", "5"))
+        .and(query_param("newsCount", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response))
+        .mount(&server)
+        .await;
+
+    let provider = Stooq::with_base_urls(server.uri(), server.uri());
+    let matches = provider.search_tickers("apple", 5).await.unwrap();
+
+    assert_eq!(matches.len(), 2);
+    assert_eq!(matches[0].symbol, "AAPL");
+    assert_eq!(matches[0].name, "Apple Inc.");
+    assert_eq!(matches[0].exchange, "NASDAQ");
+    assert_eq!(matches[0].asset_type, "Equity");
+    assert_eq!(matches[0].provider, "Stooq");
+}
+
+#[tokio::test]
+async fn yahoo_provider_fetches_and_parses_mocked_response() {
+    let server = MockServer::start().await;
+    let response = serde_json::json!({
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "currency": "EUR",
+                        "shortName": "Amundi MSCI World Swap UCITS ET",
+                        "regularMarketPrice": 618.12,
+                        "chartPreviousClose": 614.56
+                    },
+                    "timestamp": [1735689600_i64, 1735776000_i64],
+                    "indicators": {
+                        "quote": [
+                            {
+                                "close": [614.56, 618.12]
+                            }
+                        ]
+                    }
+                }
+            ],
+            "error": null
+        }
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/v8/finance/chart/CW8.PA"))
+        .and(query_param("range", "5d"))
+        .and(query_param("interval", "1d"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response))
+        .mount(&server)
+        .await;
+
+    let provider = YahooFinance::with_base_url(server.uri());
+    let symbols = vec!["cw8.pa".to_string()];
+    let prices = provider.get_prices(&symbols, "usd").await.unwrap();
+
+    assert_eq!(prices.len(), 1);
+    assert_eq!(prices[0].symbol, "CW8.PA");
+    assert_eq!(prices[0].name, "Amundi MSCI World Swap UCITS ET");
+    assert!((prices[0].price - 618.12).abs() < f64::EPSILON);
+    assert!((prices[0].change_24h.unwrap() - 0.5792762301484085).abs() < 1e-12);
+    assert_eq!(prices[0].market_cap, None);
+    assert_eq!(prices[0].currency, "EUR");
+    assert_eq!(prices[0].provider, "Yahoo Finance");
+}
+
+#[tokio::test]
+async fn yahoo_provider_fetches_history_with_explicit_window() {
+    let server = MockServer::start().await;
+    let response = serde_json::json!({
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "currency": "EUR",
+                        "shortName": "Amundi MSCI World Swap UCITS ET"
+                    },
+                    "timestamp": [1735689600_i64, 1735776000_i64, 1735862400_i64],
+                    "indicators": {
+                        "quote": [
+                            {
+                                "close": [610.0, 615.5, 618.2]
+                            }
+                        ]
+                    }
+                }
+            ],
+            "error": null
+        }
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/v8/finance/chart/CW8.PA"))
+        .and(query_param("period1", "1735689600"))
+        .and(query_param("period2", "1735948799"))
+        .and(query_param("interval", "1d"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response))
+        .mount(&server)
+        .await;
+
+    let provider = YahooFinance::with_base_url(server.uri());
+    let symbols = vec!["cw8.pa".to_string()];
+    let start = chrono::DateTime::<chrono::Utc>::from_timestamp(1735689600, 0).unwrap();
+    let end = chrono::DateTime::<chrono::Utc>::from_timestamp(1735948798, 0).unwrap();
+    let history = provider
+        .get_price_history_window(&symbols, "usd", Some(start), end, HistoryInterval::Daily)
+        .await
+        .expect("history should parse");
+
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].symbol, "CW8.PA");
+    assert_eq!(history[0].name, "Amundi MSCI World Swap UCITS ET");
+    assert_eq!(history[0].currency, "EUR");
+    assert_eq!(history[0].provider, "Yahoo Finance");
+    assert_eq!(history[0].points.len(), 3);
+    assert!((history[0].points[0].price - 610.0).abs() < f64::EPSILON);
+    assert!((history[0].points[2].price - 618.2).abs() < f64::EPSILON);
 }

@@ -2,6 +2,8 @@ mod cache;
 pub mod coingecko;
 pub mod coinmarketcap;
 pub mod frankfurter;
+pub mod stooq;
+pub mod yahoo;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -26,6 +28,16 @@ pub struct CoinPrice {
 pub struct PricePoint {
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub price: f64,
+}
+
+/// A single ticker search match returned by a provider.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TickerMatch {
+    pub symbol: String,
+    pub name: String,
+    pub exchange: String,
+    pub asset_type: String,
+    pub provider: String,
 }
 
 /// Sampling interval used when fetching historical chart data.
@@ -84,13 +96,44 @@ pub trait PriceProvider: Send + Sync {
             self.id()
         )))
     }
+
+    /// Fetch price history within an explicit time window.
+    ///
+    /// Providers that do not support explicit windows may return a configuration error.
+    async fn get_price_history_window(
+        &self,
+        _symbols: &[String],
+        _currency: &str,
+        _start: Option<chrono::DateTime<chrono::Utc>>,
+        _end: chrono::DateTime<chrono::Utc>,
+        _interval: HistoryInterval,
+    ) -> Result<Vec<PriceHistory>> {
+        Err(Error::Config(format!(
+            "provider '{}' does not support explicit chart date windows",
+            self.id()
+        )))
+    }
+
+    /// Search provider instruments by symbol/name query.
+    ///
+    /// Providers that do not support search may return a configuration error.
+    async fn search_tickers(&self, _query: &str, _limit: usize) -> Result<Vec<TickerMatch>> {
+        Err(Error::Config(format!(
+            "provider '{}' does not support ticker search",
+            self.id()
+        )))
+    }
 }
 
 /// Build the list of available providers based on configuration.
 pub fn available_providers(api_key: Option<String>) -> Vec<Box<dyn PriceProvider>> {
     let cmc_key = api_key.or_else(|| std::env::var("COINMARKETCAP_API_KEY").ok());
 
-    let mut providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(coingecko::CoinGecko::new())];
+    let mut providers: Vec<Box<dyn PriceProvider>> = vec![
+        Box::new(coingecko::CoinGecko::new()),
+        Box::new(stooq::Stooq::new()),
+        Box::new(yahoo::YahooFinance::new()),
+    ];
     match cmc_key {
         Some(key) => providers.push(Box::new(coinmarketcap::CoinMarketCap::new(key))),
         None => providers.push(Box::new(coinmarketcap::CoinMarketCap::without_key())),
