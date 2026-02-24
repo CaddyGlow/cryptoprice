@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -9,9 +10,6 @@ use crate::error::{Error, Result};
 /// Default fiat currency for price display.
 pub const DEFAULT_CURRENCY: &str = "usd";
 
-/// Default provider identifier.
-pub const DEFAULT_PROVIDER: &str = "cmc";
-
 /// File name used in the XDG config directory.
 pub const CONFIG_FILE_NAME: &str = "cryptoprice.toml";
 
@@ -22,6 +20,7 @@ pub const CONFIG_FILE_NAME: &str = "cryptoprice.toml";
 pub struct AppConfig {
     pub defaults: DefaultsConfig,
     pub coinmarketcap: CoinMarketCapConfig,
+    pub watchlists: HashMap<String, Vec<String>>,
 }
 
 /// General defaults used when CLI flags are not provided.
@@ -29,6 +28,7 @@ pub struct AppConfig {
 #[serde(default)]
 pub struct DefaultsConfig {
     pub currency: Option<String>,
+    pub provider_order: Option<Vec<String>>,
 }
 
 /// CoinMarketCap provider-specific configuration.
@@ -103,7 +103,9 @@ mod tests {
     fn parse_empty_config_uses_defaults() {
         let cfg = parse("").unwrap();
         assert!(cfg.defaults.currency.is_none());
+        assert!(cfg.defaults.provider_order.is_none());
         assert!(cfg.coinmarketcap.api_key.is_none());
+        assert!(cfg.watchlists.is_empty());
     }
 
     #[test]
@@ -130,5 +132,51 @@ mod tests {
         .unwrap();
 
         assert_eq!(cfg.defaults.currency.as_deref(), Some("eur"));
+        assert!(cfg.defaults.provider_order.is_none());
+    }
+
+    #[test]
+    fn parse_provider_order() {
+        let cfg = parse(
+            r#"
+            [defaults]
+            provider_order = ["yahoo", "coingecko", "stooq"]
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            cfg.defaults.provider_order,
+            Some(vec![
+                "yahoo".to_string(),
+                "coingecko".to_string(),
+                "stooq".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn parse_watchlists() {
+        let cfg = parse(
+            r#"
+            [watchlists]
+            commodities = ["GC=F", "SI=F", "CL=F"]
+            metals = ["GC=F", "SI=F"]
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            cfg.watchlists.get("commodities"),
+            Some(&vec![
+                "GC=F".to_string(),
+                "SI=F".to_string(),
+                "CL=F".to_string()
+            ])
+        );
+        assert_eq!(
+            cfg.watchlists.get("metals"),
+            Some(&vec!["GC=F".to_string(), "SI=F".to_string()])
+        );
     }
 }

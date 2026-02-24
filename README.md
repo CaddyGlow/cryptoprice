@@ -121,9 +121,14 @@ Example:
 ```toml
 [defaults]
 currency = "eur"
+provider_order = ["coingecko", "yahoo", "stooq", "cmc"]
 
 [coinmarketcap]
 api_key = "YOUR_COINMARKETCAP_API_KEY"
+
+[watchlists]
+commodities = ["GC=F", "SI=F", "CL=F", "BZ=F", "NG=F"]
+metals = ["GC=F", "SI=F"]
 ```
 
 Precedence:
@@ -136,6 +141,8 @@ Precedence:
 Notes:
 
 - `[defaults].currency` sets the default quote currency for normal price lookup mode (for example `cryptoprice btc eth`).
+- `[defaults].provider_order` controls provider priority when `--provider` is omitted. Unknown provider ids return a config error.
+- `[watchlists]` lets you define reusable symbol groups and call them as positional arguments with `@name` (for example `cryptoprice @commodities`).
 - Conversion mode does not use `[defaults].currency` for the source currency; it uses the first argument (for example `100usd`).
 
 ## CLI Overview
@@ -157,6 +164,8 @@ cryptoprice --provider coingecko btc eth
 cryptoprice -p cmc -c eur btc sol
 cryptoprice -p yahoo CW8.PA VWCE.DE
 cryptoprice -p stooq aapl msft nvda
+cryptoprice --provider yahoo @commodities
+cryptoprice @commodities
 cryptoprice --json -p coingecko btc eth
 cryptoprice --chart --interval 1M -p coingecko btc eth
 cryptoprice --chart --interval 1Y -p yahoo CW8.PA
@@ -170,6 +179,8 @@ Notes:
 - `coingecko` works without an API key.
 - `yahoo` works without an API key and supports global stock/ETF symbols.
 - `stooq` works without an API key and supports stock/ETF symbols (US tickers default to `.US`).
+- When `--provider` is omitted, price lookup and conversion mode use provider fallback in `[defaults].provider_order` (then append remaining available providers).
+- Use `@watchlist_name` to expand symbols from config before lookup (for example `@commodities`).
 - `--list-providers` always includes `coingecko`, `cmc`, `yahoo`, and `stooq`.
 - Increase logging with `-v`, `-vv`, or `-vvv` (logs are written to stderr).
 
@@ -182,6 +193,8 @@ You can also use shorthand style `cryptoprice search <query>`.
 Examples:
 
 ```sh
+cryptoprice --search apple
+cryptoprice search apple
 cryptoprice --provider stooq --search apple
 cryptoprice --provider stooq --search tesla --search-limit 5
 cryptoprice --provider stooq --search nvidia --json
@@ -192,6 +205,7 @@ cryptoprice search --provider yahoo cw8
 Notes:
 
 - Ticker search support is available on `stooq` and `yahoo`.
+- When `--provider` is omitted, ticker search runs across providers in `[defaults].provider_order` and merges duplicate matches by combining provider names.
 - `--search-limit` defaults to `10` and supports `1..=50`.
 
 ### Chart Mode (Price History)

@@ -144,5 +144,7 @@ pub fn available_providers(api_key: Option<String>) -> Vec<Box<dyn PriceProvider
 
 /// Look up a provider index by its short id.
 pub fn get_provider(providers: &[Box<dyn PriceProvider>], id: &str) -> Option<usize> {
-    providers.iter().position(|p| p.id() == id)
+    providers
+        .iter()
+        .position(|p| p.id().eq_ignore_ascii_case(id))
 }
